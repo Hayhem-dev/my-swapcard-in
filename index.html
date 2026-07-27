@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>EA Summit — Check-in</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --ink:#0b0e0c;
+    --paper:#eef0ea;
+    --line:#3a3f38;
+    --go:#1f8a4c;
+    --go-deep:#14612f;
+    --stop:#b23a2e;
+    --stop-deep:#7c281f;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    display:flex;
+    flex-direction:column;
+    min-height:100dvh;
+    overflow:hidden;
+  }
+
+  header{
+    padding:18px 20px 12px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid rgba(238,240,234,0.12);
+  }
+  header .brand{
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:rgba(238,240,234,0.55);
+  }
+  header .title{
+    font-size:17px;
+    font-weight:600;
+  }
+  #count{
+    font-family:var(--mono);
+    font-size:13px;
+    color:rgba(238,240,234,0.55);
+  }
+
+  #reader-wrap{
+    position:relative;
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#000;
+    min-height:0;
+  }
+  #reader{
+    width:100%;
+    height:100%;
+  }
+  #reader video{
+    object-fit:cover;
+    width:100% !important;
+    height:100% !important;
+  }
+  /* hide the library's default file-picker / stop button chrome for a cleaner kiosk look */
+  #reader__dashboard_section_csr, #reader__dashboard{
+    display:none !important;
+  }
+
+  .frame{
+    position:absolute;
+    inset:14% 14%;
+    border:2px solid rgba(238,240,234,0.85);
+    border-radius:18px;
+    pointer-events:none;
+  }
+  .frame::before, .frame::after{
+    content:"";
+    position:absolute;
+    width:28px; height:28px;
+    border-color:var(--go);
+  }
+
+  #status{
+    position:relative;
+    padding:22px 20px calc(22px + env(safe-area-inset-bottom));
+    text-align:center;
+    transition:background 0.15s ease;
+    border-top:1px solid rgba(238,240,234,0.12);
+  }
+  #status .name{
+    font-size:22px;
+    font-weight:700;
+    margin:0 0 4px;
+  }
+  #status .msg{
+    font-size:14px;
+    color:rgba(238,240,234,0.7);
+    font-family:var(--mono);
+    margin:0;
+  }
+  #status.go{ background:var(--go); }
+  #status.go .msg{ color:rgba(255,255,255,0.85); }
+  #status.stop{ background:var(--stop); }
+  #status.stop .msg{ color:rgba(255,255,255,0.85); }
+  #status.idle .name{ color:rgba(238,240,234,0.4); font-weight:600; font-size:16px; }
+
+  .pulse{
+    animation:pulse 0.5s ease;
+  }
+  @keyframes pulse{
+    0%{ transform:scale(1); }
+    30%{ transform:scale(1.015); }
+    100%{ transform:scale(1); }
+  }
+
+  #manual{
+    display:flex;
+    gap:8px;
+    padding:0 20px 14px;
+    background:var(--ink);
+  }
+  #manual input{
+    flex:1;
+    background:rgba(238,240,234,0.08);
+    border:1px solid rgba(238,240,234,0.2);
+    color:var(--paper);
+    padding:10px 12px;
+    border-radius:10px;
+    font-family:var(--mono);
+    font-size:14px;
+  }
+  #manual button{
+    background:rgba(238,240,234,0.12);
+    color:var(--paper);
+    border:1px solid rgba(238,240,234,0.2);
+    padding:10px 16px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:14px;
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <div class="brand">EA Summit</div>
+      <div class="title">Check-in scanner</div>
+    </div>
+    <div id="count">0 checked in</div>
+  </header>
+
+  <div id="reader-wrap">
+    <div id="reader"></div>
+    <div class="frame"></div>
+  </div>
+
+  <div id="manual">
+    <input id="manual-code" type="text" inputmode="text" placeholder="Or type badge code manually" />
+    <button id="manual-submit">Check in</button>
+  </div>
+
+  <div id="status" class="idle">
+    <p class="name">Point camera at a badge</p>
+    <p class="msg">Waiting for scan…</p>
+  </div>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const countEl = document.getElementById('count');
+  let checkedInCount = 0;
+  let locked = false; // prevents double-fires on the same scan
+
+  function setStatus(state, name, msg) {
+    statusEl.className = state;
+    statusEl.classList.add('pulse');
+    statusEl.querySelector('.name').textContent = name;
+    statusEl.querySelector('.msg').textContent = msg;
+    setTimeout(() => statusEl.classList.remove('pulse'), 500);
+  }
+
+  async function submitCode(code) {
+    if (locked) return;
+    locked = true;
+    setStatus('idle', 'Checking…', code);
+
+    try {
+      const res = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+
+      if (data.ok && !data.alreadyCheckedIn) {
+        checkedInCount += 1;
+        countEl.textContent = `${checkedInCount} checked in`;
+        setStatus('go', data.name, 'Checked in ✓');
+        if (navigator.vibrate) navigator.vibrate(80);
+      } else if (data.ok && data.alreadyCheckedIn) {
+        setStatus('stop', data.name, 'Already checked in');
+        if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+      } else {
+        setStatus('stop', 'Not found', data.message || 'No matching registration.');
+        if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+      }
+    } catch (err) {
+      setStatus('stop', 'Error', 'Could not reach server.');
+    } finally {
+      // unlock after a short pause so the same badge isn't scanned twice in a row
+      setTimeout(() => { locked = false; }, 2000);
+    }
+  }
+
+  // Camera scanning
+  const qr = new Html5Qrcode('reader');
+  Html5Qrcode.getCameras().then(cameras => {
+    const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+    qr.start(
+      backCam ? backCam.id : { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 260 } },
+      (decodedText) => submitCode(decodedText.trim()),
+      () => {} // ignore per-frame "no QR found" noise
+    );
+  }).catch(() => {
+    setStatus('stop', 'Camera unavailable', 'Allow camera access or use manual entry below.');
+  });
+
+  // Manual fallback (typed code, or a barcode scanner that types + Enter)
+  const manualInput = document.getElementById('manual-code');
+  const manualBtn = document.getElementById('manual-submit');
+  function submitManual() {
+    const val = manualInput.value.trim();
+    if (val) {
+      submitCode(val);
+      manualInput.value = '';
+    }
+  }
+  manualBtn.addEventListener('click', submitManual);
+  manualInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitManual();
+  });
+</script>
+</body>
+</html>
