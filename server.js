@@ -61,11 +61,11 @@ const FIND_PERSON_QUERY = `
 // 2. Mark that registration as checked in right now.
 // NOTE: Swapcard's current schema doesn't expose a standalone
 // `updateRegistration` mutation — the registration update is nested
-// inside `updateEventPerson` via UpdateEventPersonInput.registration
+// inside `updateEventPerson` via UpdateEventPersonV2Input.registration
 // (which takes an UpdateRegistrationInput). See:
 // https://swapcard.dev/organizer/content-api/graphql-event-api-schema/inputs/update-registration-input
 const CHECK_IN_MUTATION = `
-  mutation CheckIn($input: UpdateEventPersonInput!) {
+  mutation CheckIn($input: UpdateEventPersonV2Input!) {
     updateEventPerson(input: $input) {
       eventPerson {
         id
