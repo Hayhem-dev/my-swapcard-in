@@ -59,21 +59,31 @@ const FIND_PERSON_QUERY = `
 `;
 
 // 2. Mark that registration as checked in right now.
-// NOTE: Swapcard's current schema doesn't expose a standalone
-// `updateRegistration` mutation — the registration update is nested
-// inside `updateEventPerson` via UpdateEventPersonV2Input.registration
-// (which takes an UpdateRegistrationInput). See:
-// https://swapcard.dev/organizer/content-api/graphql-event-api-schema/inputs/update-registration-input
+// NOTE: Confirmed against Swapcard's live schema (via GraphQL introspection):
+// - There is no standalone `updateRegistration` mutation.
+// - `updateEventPerson` takes `UpdateEventPersonV2Input`, which has NO
+//   `registration` field at all — it only covers profile fields
+//   (name, email, job title, etc).
+// - The only mutation that can touch registration/check-in data is
+//   `importEventPeople`, whose `data` argument is a list of
+//   `ImportEventPersonInput`. Each item has an `update` field typed as
+//   `UpdateEventPersonInput` (note: NOT the V2 one used by updateEventPerson)
+//   which does carry a `registration` node.
+// See Swapcard changelog: "When creating or updating a person using the
+// importEventPeople mutation the registration status and ticket may be set."
 const CHECK_IN_MUTATION = `
-  mutation CheckIn($input: UpdateEventPersonV2Input!) {
-    updateEventPerson(input: $input) {
-      eventPerson {
+  mutation CheckIn($eventId: ID!, $data: [ImportEventPersonInput!]!) {
+    importEventPeople(eventId: $eventId, data: $data) {
+      eventPeople {
         id
         registration {
           id
           checkIn
           checkInSource
         }
+      }
+      errors {
+        code
       }
     }
   }
@@ -112,16 +122,27 @@ app.post('/api/checkin', async (req, res) => {
       });
     }
 
-    await swapcardRequest(CHECK_IN_MUTATION, {
-      input: {
-        id: person.id,
-        registration: {
-          id: person.registration.id,
-          checkIn: new Date().toISOString(),
-          checkInSource: 'API',
+    const importResult = await swapcardRequest(CHECK_IN_MUTATION, {
+      eventId: EVENT_ID,
+      data: [
+        {
+          id: person.id,
+          update: {
+            registration: {
+              id: person.registration.id,
+              checkIn: new Date().toISOString(),
+              checkInSource: 'API',
+            },
+          },
         },
-      },
+      ],
     });
+
+    const importErrors = importResult?.importEventPeople?.errors;
+    if (importErrors && importErrors.length) {
+      const message = importErrors.map(e => e.code).join('; ');
+      throw new Error(`Swapcard rejected the check-in: ${message}`);
+    }
 
     return res.json({
       ok: true,
