@@ -74,14 +74,7 @@ const FIND_PERSON_QUERY = `
 const CHECK_IN_MUTATION = `
   mutation CheckIn($eventId: ID!, $data: [ImportEventPersonInput!]!) {
     importEventPeople(eventId: $eventId, data: $data) {
-      eventPeopleUpdated {
-        id
-        registration {
-          id
-          checkIn
-          checkInSource
-        }
-      }
+      eventPeopleUpdated
       errors {
         errorCode
         message
