@@ -74,7 +74,7 @@ const FIND_PERSON_QUERY = `
 const CHECK_IN_MUTATION = `
   mutation CheckIn($eventId: ID!, $data: [ImportEventPersonInput!]!) {
     importEventPeople(eventId: $eventId, data: $data) {
-      eventPeople {
+      eventPeopleUpdated {
         id
         registration {
           id
@@ -83,7 +83,8 @@ const CHECK_IN_MUTATION = `
         }
       }
       errors {
-        code
+        errorCode
+        message
       }
     }
   }
@@ -140,7 +141,7 @@ app.post('/api/checkin', async (req, res) => {
 
     const importErrors = importResult?.importEventPeople?.errors;
     if (importErrors && importErrors.length) {
-      const message = importErrors.map(e => e.code).join('; ');
+      const message = importErrors.map(e => e.message || e.errorCode).join('; ');
       throw new Error(`Swapcard rejected the check-in: ${message}`);
     }
 
