@@ -125,7 +125,7 @@ app.post('/api/checkin', async (req, res) => {
             registration: {
               id: person.registration.id,
               checkIn: new Date().toISOString(),
-              checkInSource: 'API',
+              checkInSource: 'STUDIO',
             },
           },
         },
